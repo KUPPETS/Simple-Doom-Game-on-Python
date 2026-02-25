@@ -6,6 +6,25 @@ class Sound:
         self.game = game
         pygame.mixer.init()
         self.path = 'Graphics/resources/sounds/'
+
+        # В headless-режиме mixer выключен — все звуки None
+        if game.headless:
+            self.shoot = None
+            self.player_damaged = None
+            self.player_death = None
+            self.music = None
+            self.marine_death = None
+            self.marine_damaged = None
+            self.marine_attack = None
+            self.lost_soul_death = None
+            self.lost_soul_damaged = None
+            self.lost_soul_attack = None
+            self.cyber_demon_death = None
+            self.cyber_demon_damaged = None
+            self.cyber_demon_attack = None
+            return
+
+        pygame.mixer.init()
         self.shoot = pygame.mixer.Sound(self.path + 'pewgun.wav')
         self.player_damaged = pygame.mixer.Sound(self.path + 'player_damaged.wav')
         self.player_death = pygame.mixer.Sound(self.path + 'player_death.wav')

@@ -9,7 +9,8 @@ class Weapon(AnimatedObject):
         super().__init__(game=game, path=path, scale=scale, animation_time=animation_time)
         self.images = deque(
             [pygame.transform.smoothscale(img, (self.image.get_width() * scale, self.image.get_height() * scale)) for
-             img in self.images])
+             img in self.images]
+        )
         self.weapon_position = (HALF_WIDTH - self.images[0].get_width() // 2, HEIGHT - self.images[0].get_height())
         self.reloading = False
         self.number_images = len(self.images)
@@ -18,14 +19,16 @@ class Weapon(AnimatedObject):
 
     def animation_shoot(self):
         if self.reloading:
-            self.game.player.shot = False
             if self.animation_trigger:
                 self.images.rotate(-1)
                 self.image = self.images[0]
                 self.frame_counter += 1
+
+                # ВАЖНО: shot сбрасываем в конце анимации, а не каждый тик
                 if self.frame_counter == self.number_images:
                     self.reloading = False
                     self.frame_counter = 0
+                    self.game.player.shot = False  # <- перенесено сюда
 
     def draw(self):
         self.game.screen.blit(self.images[0], self.weapon_position)

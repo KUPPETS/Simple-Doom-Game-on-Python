@@ -1,5 +1,3 @@
-# player.py (patched for human + RL control)
-
 import pygame
 import math
 from settings import *
@@ -24,25 +22,27 @@ class Player:
         self.rl_move = 0             # -1 back, 0 none, +1 forward
         self.rl_strafe = 0           # -1 left, 0 none, +1 right
         self.rl_turn = 0             # -1 left, 0 none, +1 right
-        self.rl_shoot = False
+
+        # RL стрельба как "клик"
+        self.rl_shoot_request = False
 
     # ---------- RL API ----------
     def set_rl_action(self, move=0, strafe=0, turn=0, shoot=False):
         self.rl_move = int(move)
         self.rl_strafe = int(strafe)
         self.rl_turn = int(turn)
-        self.rl_shoot = bool(shoot)
+        if shoot:
+            self.rl_shoot_request = True
 
     def rl_shoot_step(self):
-        # shoot without pygame events
-        if self.rl_shoot and (not self.shot) and (not self.game.weapon.reloading):
-            # sound optional in headless
+        if self.rl_shoot_request and (not self.game.weapon.reloading) and (not self.shot):
             try:
                 self.game.sound.shoot.play()
             except Exception:
                 pass
             self.shot = True
             self.game.weapon.reloading = True
+        self.rl_shoot_request = False
 
     # ---------- Health ----------
     def regen_health(self):
@@ -57,7 +57,6 @@ class Player:
         return False
 
     def game_over(self):
-        # RL: no auto-reset, just set flag
         if self.health < 1:
             if getattr(self, "control_mode", "human") == "rl":
                 self.game.dead = True
@@ -69,7 +68,6 @@ class Player:
 
     def getting_damage(self, damage):
         self.health -= damage
-        # avoid heavy rendering during RL training
         if getattr(self, "control_mode", "human") != "rl":
             self.game.render.draw_damage_screen()
         try:
@@ -80,11 +78,10 @@ class Player:
 
     # ---------- Human input ----------
     def single_shoot(self, event):
-        # keep for human play
         if self.control_mode != "human":
             return
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1 and not self.shot and not self.game.weapon.reloading:
+            if event.button == 1 and (not self.shot) and (not self.game.weapon.reloading):
                 self.game.sound.shoot.play()
                 self.shot = True
                 self.game.weapon.reloading = True
@@ -114,7 +111,6 @@ class Player:
                 dx += -speed_sin
                 dy += speed_cos
         else:
-            # forward/back
             if self.rl_move == 1:
                 dx += speed_cos
                 dy += speed_sin
@@ -122,7 +118,6 @@ class Player:
                 dx += -speed_cos
                 dy += -speed_sin
 
-            # strafe
             if self.rl_strafe == -1:
                 dx += speed_sin
                 dy += -speed_cos
@@ -143,28 +138,49 @@ class Player:
             self.rel = max(-MOUSE_MAX_RELATIVE, min(MOUSE_MAX_RELATIVE, self.rel))
             self.angle += self.rel * MOUSE_SENSITIVITY * self.game.delta_time
         else:
-            # discrete turning for RL (no mouse dependency)
-            turn_speed = 0.04  # tune if needed
+            turn_speed = 0.02
             self.rel = self.rl_turn
             self.angle += self.rl_turn * turn_speed
 
     # ---------- Collision ----------
     def check_walls(self, x, y):
-        return (x, y) not in self.game.map.world_map
+        # x,y в тайлах; вне карты считаем стеной
+        if x < 0 or y < 0 or x >= self.game.map.cols or y >= self.game.map.rows:
+            return False
+        return (int(x), int(y)) not in self.game.map.world_map
 
     def check_collision(self, dx, dy):
-        scale = PLAYER_SIZE / self.game.delta_time
-        if self.check_walls(int(self.x + dx * scale), int(self.y)):
-            self.x += dx
-        if self.check_walls(int(self.x), int(self.y + dy * scale)):
-            self.y += dy
+        # радиус игрока в тайлах (подстрой 0.15..0.30 если нужно)
+        r = 0.20
+
+        # X
+        nx = self.x + dx
+        if (self.check_walls(nx - r, self.y - r) and
+            self.check_walls(nx - r, self.y + r) and
+            self.check_walls(nx + r, self.y - r) and
+            self.check_walls(nx + r, self.y + r)):
+            self.x = nx
+
+        # Y
+        ny = self.y + dy
+        if (self.check_walls(self.x - r, ny - r) and
+            self.check_walls(self.x - r, ny + r) and
+            self.check_walls(self.x + r, ny - r) and
+            self.check_walls(self.x + r, ny + r)):
+            self.y = ny
+
+        # страховка от выхода за карту
+        self.x = max(0.5, min(self.x, self.game.map.cols - 0.5))
+        self.y = max(0.5, min(self.y, self.game.map.rows - 0.5))
 
     # ---------- Update ----------
     def update(self):
         self.movement()
         self.mouse_motion()
+
         if self.control_mode == "rl":
             self.rl_shoot_step()
+
         self.regen_health()
 
     # ---------- Utils ----------
