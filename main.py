@@ -1,4 +1,3 @@
-# main.py
 import os
 import sys
 import pygame
@@ -22,15 +21,19 @@ class Game:
         render=False      -> skip all rendering calls (faster tick)
         phase_config=dict -> NPC types/weights/enemies/rewards for RL phases
         """
-        self.headless       = headless
+        self.headless = headless
         self.render_enabled = render
-        self.phase_config   = phase_config or {}  # <-- единственное добавление
+        self.phase_config = phase_config or {}
 
-        self.win  = False
+        self.win = False
         self.dead = False
 
+        # Headless driver handling
         if self.headless:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
+        else:
+            if os.environ.get("SDL_VIDEODRIVER") == "dummy":
+                os.environ.pop("SDL_VIDEODRIVER", None)
 
         pygame.init()
 
@@ -43,27 +46,27 @@ class Game:
         else:
             self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
 
-        self.clock      = pygame.time.Clock()
+        self.clock = pygame.time.Clock()
         self.delta_time = 16
 
         self.global_trigger = False
-        self.global_event   = pygame.USEREVENT + 0
+        self.global_event = pygame.USEREVENT + 0
         pygame.time.set_timer(self.global_event, 50)
 
         self.new_game()
 
     def new_game(self):
-        self.win  = False
+        self.win = False
         self.dead = False
 
-        self.map             = Map(self)
-        self.player          = Player(self)
-        self.render          = ObjectRender(self)
-        self.raycast         = RayCast(self)
-        self.sound           = Sound(self)
+        self.map = Map(self)
+        self.player = Player(self)
+        self.render = ObjectRender(self)
+        self.raycast = RayCast(self)
+        self.sound = Sound(self)
         self.objects_storage = ObjectStorage(self)
-        self.weapon          = Weapon(self)
-        self.pathfinding     = PathFindingAlgorithm(self)
+        self.weapon = Weapon(self)
+        self.pathfinding = PathFindingAlgorithm(self)
 
         if not self.headless:
             pygame.mixer.music.play(-1)
@@ -83,10 +86,13 @@ class Game:
          10 shoot + strafe_right
         """
         self.player.control_mode = "rl"
-        move  = 1 if action == 3 else 0
-        turn  = -1 if action in (1, 5) else (1 if action in (2, 6) else 0)
-        shoot = action in (4, 5, 6)
-        self.player.set_rl_action(move=move, strafe=0, turn=turn, shoot=shoot)
+
+        move = 1 if action == 3 else 0
+        turn = -1 if action in (1, 5) else (1 if action in (2, 6) else 0)
+        strafe = -1 if action in (7, 9) else (1 if action in (8, 10) else 0)
+        shoot = action in (4, 5, 6, 9, 10)
+
+        self.player.set_rl_action(move=move, strafe=strafe, turn=turn, shoot=shoot)
 
     def tick(self):
         if self.headless or not self.render_enabled:
@@ -118,7 +124,8 @@ class Game:
         self.global_trigger = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (
-                    event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
+            ):
                 self.close()
                 sys.exit()
             elif event.type == self.global_event:
@@ -130,7 +137,7 @@ class Game:
 
     def run(self):
         self.player.control_mode = "human"
-        self.render_enabled      = True
+        self.render_enabled = True
 
         while True:
             self.check_events()

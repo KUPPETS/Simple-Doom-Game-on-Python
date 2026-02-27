@@ -196,7 +196,7 @@ class LostSoulNPC(NPC):
         super().__init__(game, path, pos, scale, shift, animation_time)
         self.attack_distance = 1.0
         self.health = 100    # снижено с 150 — 2 попадания вместо 3, легче учить
-        self.damage = 15     # было 0 — теперь кусает, есть сигнал уворачиваться
+        self.damage = 5     # было 0 — теперь кусает, есть сигнал уворачиваться
         self.speed = 0.05
         self.accuracy = 0.35
         self.attack_sound = game.sound.lost_soul_attack

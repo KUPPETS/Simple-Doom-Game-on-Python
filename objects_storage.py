@@ -15,25 +15,30 @@ class ObjectStorage:
 
     def __init__(self, game):
         self.game = game
-        self.object_list   = []
-        self.npc_list      = []
+        self.object_list = []
+        self.npc_list = []
         self.npc_positions = set()
 
-        self.npc_objects_path      = 'Graphics/resources/nps/'
-        self.static_objects_path   = 'Graphics/resources/static_objects/'
+
+        self.npc_objects_path = 'Graphics/resources/nps/'
+        self.static_objects_path = 'Graphics/resources/static_objects/'
         self.animated_objects_path = 'Graphics/resources/animated_objects/'
 
-        # FIX: читаем phase_config из game — если есть, берём из него,
-        # если нет (human режим) — дефолтные значения
-        cfg = getattr(game, "phase_config", {})
-        self.enemies   = cfg.get("enemies",   1)
+        # читаем phase_config из game
+        cfg = getattr(game, "phase_config", {}) or {}
+        self.enemies = cfg.get("enemies", 1)
         self.npc_types = cfg.get("npc_types", [LostSoulNPC, MarineNPC, CyberDemonNPC, DummyNPC])
-        self.weights   = cfg.get("weights",   [0, 0, 0, 1])
+        self.weights = cfg.get("weights", [0, 1, 0, 0])
+
+        # NEW: Dummy spawn режим
+        # "fixed"  -> из DUMMY_SPAWN_POSITIONS
+        # "random" -> рандом по карте (по свободным тайлам)
+        self.dummy_spawn = cfg.get("dummy_spawn", "fixed")
+        # NEW: ограничение области рандома (x0, y0, x1, y1) или None
+        self.dummy_random_area = cfg.get("dummy_random_area", None)
 
         px, py = int(PLAYER_POSITION[0]), int(PLAYER_POSITION[1])
-        self.restricted_area = {
-            (px + i, py + j) for i in range(-2, 3) for j in range(-2, 3)
-        }
+        self.restricted_area = {(px + i, py + j) for i in range(-2, 3) for j in range(-2, 3)}
 
         self.spawn_npc()
 
@@ -71,17 +76,46 @@ class ObjectStorage:
             npc.update()
         self.check_win()
 
+    # -------- helpers --------
+    def _random_free_tile(self, area=None, max_tries=500):
+        """
+        Возвращает (x, y) в тайлах (int), гарантированно не стена и не restricted_area.
+        area: (x0, y0, x1, y1) где x in [x0, x1), y in [y0, y1) (семантика randrange). [web:282]
+        """
+        if area is None:
+            x0, y0, x1, y1 = 0, 0, self.game.map.cols, self.game.map.rows
+        else:
+            x0, y0, x1, y1 = area
+
+        for _ in range(max_tries):
+            x = randrange(x0, x1)
+            y = randrange(y0, y1)
+            if (x, y) in self.game.map.world_map:
+                continue
+            if (x, y) in self.restricted_area:
+                continue
+            return x, y
+
+        # fallback
+        return 1, 1
+
     def spawn_npc(self):
         for _ in range(self.enemies):
             npc_cls = choices(self.npc_types, self.weights)[0]
+
             if npc_cls is DummyNPC:
-                pos_xy = choice(self.DUMMY_SPAWN_POSITIONS)
+                if self.dummy_spawn == "random":
+                    x, y = self._random_free_tile(area=self.dummy_random_area)
+                    pos_xy = (x + 0.5, y + 0.5)
+                else:
+                    pos_xy = choice(self.DUMMY_SPAWN_POSITIONS)  # random.choice выбирает элемент из списка [web:293]
+
                 self.add_npc(npc_cls(self.game, pos=pos_xy))
-            else:
-                pos = x, y = randrange(self.game.map.cols), randrange(self.game.map.rows)
-                while (pos in self.game.map.world_map) or (pos in self.restricted_area):
-                    pos = x, y = randrange(self.game.map.cols), randrange(self.game.map.rows)
-                self.add_npc(npc_cls(self.game, pos=(x + 0.5, y + 0.5)))
+                continue
+
+            # остальные NPC — random free tile
+            x, y = self._random_free_tile()
+            self.add_npc(npc_cls(self.game, pos=(x + 0.5, y + 0.5)))
 
     def add_npc(self, npc):
         self.npc_list.append(npc)
